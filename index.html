@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
+    <link type="text/css" rel="stylesheet" href="public/bootstrap/css/bootstrap.min.css"/>
+    <link type="text/css" rel="stylesheet" href="public/css/style1.css?v=1.16"/>
+    <link type="text/css" rel="stylesheet" href="public/css/style2.css?v=1.16"/>
+    <style type="text/css"></style>
+</head>
+<body>
+<nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
+    <a class="navbar-brand" href="#">知识外脑</a>
+</nav>
+<div class="container-fluid">
+    <div class="row">
+        <div class="pack-area col-9" style="padding: 0;">
+            <!--球在此-->
+            <div id="pack"></div>
+            <!--路径条-->
+            <div id="search_node" class="clear"></div>
+        </div>
+        <div class="search-area col-3">
+            <div class="search-min-width">
+                <div class="input-group">
+                    <input type="text" id="search_word" class="form-control" placeholder="">
+                    <div class="input-group-append">
+                        <a class="btn btn-primary " id="search_btn">搜索</a>
+                    </div>
+
+                </div>
+                <div style="font-size: 8px">当前接口url：<span id="test_url"></span></div>
+                <div class="search-result-area">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="public/js/jquery-3.3.1.min.js"></script>
+<script src="public/layer/layer.js"></script>
+<script src="public/bootstrap/js/bootstrap.min.js"></script>
+<script src="public/js/d3/d3.js"></script>
+<script src="public/js/d3/d3.layout.js"></script>
+<script src="public/js/config.js"></script>
+<script>
+    var window_w = $(window).width(),//浏览器当前窗口可视区域宽度
+        window_h = $(window).height(),//浏览器当前窗口可视区域高度
+        w = 1200,
+        h = 835,
+        r = 680,
+        x = d3.scale.linear().range([0, r]),
+        y = d3.scale.linear().range([0, r]),
+        node,
+        root,
+        param = [],
+        node_tags = [],
+        q = '',
+        max = -1;
+
+    var pack = d3.layout.pack()
+        .size([r, r])
+        .value(function (d) {
+            return d.size;
+        })
+
+    $(function () {
+        drawPack('');
+    });
+
+
+    function loadPack(json) {
+        d3.json(json, function (data) {
+            // 右侧结果区刷新
+            myLog('data.hits', data.hits);
+            if (data.hits) {
+                loadResult(data['hits']);
+            } else {
+                console.log(123123);
+                var res_html = '<div class="search-result-area-1">为您为找到相关结果约0个</div>';
+                $(".search-result-area").html(res_html);
+            }
+
+            //转换数据格式画图
+            data = dataConvert(data);
+            node = root = data;
+            var nodes = pack.nodes(root);
+            vis.selectAll("circle")
+                .data(nodes)
+                .enter().append("svg:circle")
+                .attr("class", function (d) {
+                    return d.children ? "parent" : "child";
+                })
+                .attr("cx", function (d) {
+                    return d.x;
+                })
+                .attr("cy", function (d) {
+                    return d.y;
+                })
+                .attr("r", function (d) {
+                    return d.r;
+                })
+                .on("click", function (d) {
+                    // return zoom(node == d ? root : d);
+                    clickPack(d);
+                    return zoom(d);
+                });
+
+            vis.selectAll("text")
+                .data(nodes)
+                .enter().append("svg:text")
+                .attr("class", function (d) {
+                    return d.children ? "parent" : "child";
+                })
+                .attr("class", function (d) {
+                    return d.test ? "parent" : "child";
+                })
+                .attr("x", function (d) {
+                    return d.x;
+                })
+                .attr("y", function (d) {
+                    return d.y;
+                })
+                .attr("dy", ".35em")
+                .attr("text-anchor", "middle")
+                .style("opacity", function (d) {
+                    //字显示
+                    // return d.r > 20 ? 1 : 0;
+                })
+                .text(function (d) {
+                    return d.name;
+                });
+
+            // d3.select(window).on("click", function () {
+            //     zoom(root);
+            // });
+        });
+    }
+
+    function zoom(d) {
+        var k = r / d.r / 2;
+        x.domain([d.x - d.r, d.x + d.r]);
+        y.domain([d.y - d.r, d.y + d.r]);
+
+        var t = vis.transition()
+            .duration(d3.event.altKey ? 7500 : 750);
+
+        t.selectAll("circle")
+            .attr("cx", function (d) {
+                return x(d.x);
+            })
+            .attr("cy", function (d) {
+                return y(d.y);
+            })
+            .attr("r", function (d) {
+                return k * d.r;
+            });
+
+        t.selectAll("text")
+            .attr("x", function (d) {
+                return x(d.x);
+            })
+            .attr("y", function (d) {
+                return y(d.y);
+            })
+            .style("opacity", function (d) {
+                return k * d.r > 20 ? 1 : 0;
+            });
+
+        node = d;
+        d3.event.stopPropagation();
+    }
+
+
+    //============================================
+
+    //接口数据转换
+    function dataConvert(data) {
+        var res = {
+            'id': data['id'],
+            'tags': data['tags'],
+            'children': [],
+            // 'name': '(id:' + data['id'] + ',' + 'count:' + data['count'] + ')'
+        };
+        if (data['children'] && data['children'].length) {
+            var d_child = {};
+            //球太多了，先前端控制显示10个
+            for (var i = 0; i < data['children'].length; i++) {
+                // var i_end = data['children'].length > 10 ? 10 : data['children'].length;
+                // for (var i = 0; i < i_end; i++) {
+                d_child = data['children'][i];
+                res['children'][i] = dataConvert(d_child);
+            }
+
+        } else {
+            var my_size = getQueryString('size') ? getQueryString('size') : 200
+            for (var i = 0; i < data['tags'].length; i++) {
+                res['children'][i] = {
+                    "name": data['tags'][i][0],
+                    "size": Math.sqrt((data['tags'][i][1] * my_size) + 2)
+                }
+            }
+            //测试用显示id和count
+            res['children'][data['tags'].length] = {
+                'tags': [],
+                'size': 15,
+                'test': 1,
+                'name': data['id'] + ',' + data['count'],
+            }
+        }
+        return res;
+    }
+
+    //点击搜索
+    $('#search_btn').on("click", function () {
+        if (typeof node_tags[node_tags.length - 1] === 'string') {
+            layer.msg('不能连续用关键字搜索');
+            return false;
+        }
+        var search_word = $("#search_word").val();
+        if (!search_word) {
+            return false;
+        }
+        myLog('search_word', search_word);
+        var tags = search_word;
+        if (max == -1 && search_word == param[param.length - 1]) {
+            myLog('重复点击', '重复点击');
+            return false;
+        }
+        myLog('max', max);
+        if (max != -1) {
+            param = param.slice(0, max);
+            node_tags = node_tags.slice(0, max);
+        }
+        param.push('"' + search_word + '"');
+        myLog('param', param);
+        q = param2q();
+        setTimeout('drawPack(q)', 800);
+        //画路径
+        node_tags.push(tags);
+        drawNode();
+        max = -1;
+    });
+
+    $('#search_node').on('click', '.node-text', function () {
+        max = $(this).data('id');
+        q = param2q();
+        drawPack(q);
+        $(this).siblings().removeClass("node-text-visited");
+        $(this).addClass("node-text-visited");
+    }).on('click', '#clear_node', function () {
+        window.location.reload();
+    }).on('mouseenter', '.node-array', function () {
+        var id = $(this).data('id');
+        var long_text = node_tags[id - 1].join("<br />");
+        $(this).hide().fadeIn(250).addClass('node-text-hover').children('.node-text-word').html(long_text);
+    }).on('mouseleave', '.node-array', function () {
+        var id = $(this).data('id');
+        var short_text = node_tags[id - 1][0];
+        $(this).removeClass('node-text-hover').children('.node-text-word').html(short_text);
+    });
+
+    function drawPack(q) {
+        var json = base_url + q;
+
+        //测试用
+        var test_url_value = json;
+        var test_url = '<a target="_blank" href=\'' + test_url_value + '\'>' + test_url_value + '</a>';
+        $("#test_url").html(test_url);
+        //
+        myLog('json', json);
+        $("#pack").empty();
+        vis = d3.select("#pack").insert("svg:svg", "h2")
+            .attr("preserveAspectRatio", "xMidYMid meet")
+            .attr("viewBox", "0 0 1200 800")
+            .append("svg:g")
+            .attr("transform", "translate(" + (w - r) / 2 + "," + (h - r) / 2 + ")");
+        loadPack(json);
+    }
+
+    function drawNode() {
+        var node_html = '';
+        for (var i = 0; i < node_tags.length; i++) {
+            node_html += '<div data-id=' + (i + 1) + ' ';
+            node_html += 'class="fl node-text ';
+            if (i == node_tags.length - 1) {
+                node_html += 'node-text-visited ';
+            }
+
+            if (typeof node_tags[i] === 'string') {
+                node_html += 'node-string "><img src="public/img/icon2_string.png?v=1" alt="搜索图标"/><span class="node-text-word">' + node_tags[i] + '</span>';
+            } else {
+                node_html += 'node-array"><img src="public/img/icon1_array.png?v=1" alt="点击图标"/><span class="node-text-word">' + node_tags[i][0] + '</span>';
+            }
+            node_html += '</div>';
+            myLog('node_html', node_html);
+            if (i < node_tags.length - 1) {
+                node_html += '<div class="fl node-arrow"></div>';
+            }
+        }
+        //清理路径
+        node_html += '<div class="fl" id="clear_node"></div>';
+        $("#search_node").html(node_html);
+    }
+
+    function clickPack(d) {
+        var id = d['id'];
+        myLog('id', id);
+        var tags = d['tags'];
+        if (max == -1 && id == param[param.length - 1]) {
+            myLog('重复点击', '重复点击');
+            return false;
+        }
+        myLog('max', max);
+        if (max != -1) {
+            param = param.slice(0, max);
+            node_tags = node_tags.slice(0, max);
+        }
+        param.push(id);
+        q = param2q();
+        setTimeout('drawPack(q)', 800);
+        //画路径
+        if (tags.length > 0) {
+            var tags_temp = [];
+            for (var i = 0; i < tags.length; i++) {
+                tags_temp[i] = tags[i][0];
+            }
+            node_tags.push(tags_temp);
+            drawNode();
+        }
+        max = -1;
+    }
+
+    function param2q() {
+        var i_max = (max == -1) ? param.length : max;
+        var res = '[';
+        for (var i = 0; i < i_max; i++) {
+            res += param[i];
+            if (i < i_max - 1) {
+                res += ',';
+            }
+        }
+        res += ']';
+        return res;
+    }
+
+    //输出结果列表
+    function loadResult(data, active_num = 1) {
+        var res_html = '';
+        var total = data.total;
+
+        if (total > 0) {
+
+            res_html += '<div class="search-result-area-1">' +
+                '为您为找到相关结果约' + total + '个' +
+                '</div>' +
+                '<div class="search-result-area-2">';
+            var list = data.list;
+            for (var i = 0; i < list.length; i++) {
+                res_html += '<div class="search-result-row">' +
+                    '<a target="_blank" href="' + list[i]['h5_url'] + '"' + 'class="search-result-title">' + list[i]['title'] + '</a>' +
+                    '<div class="search-result-desc">' +
+                    list[i]['desc'] +
+                    '</div>' +
+                    '</div>';
+            }
+            res_html += '</div>';
+            var page_num = parseInt(total / 20);//调整页码参数20
+            if (page_num > 0) {
+                res_html += loadPagination(page_num, active_num);
+            }
+            $(".search-result-area").html(res_html);
+
+        } else {
+            res_html += '<div class="search-result-area-1">' +
+                '为您为找到相关结果约0个' +
+                '</div>';
+        }
+        $(".search-result-area-2").height(window_h - 290);
+    }
+
+    //分页
+    function loadPagination(page_num, active_num) {
+        var num_max = 0,
+            html = '<ul class="pagination pagination-sm">',
+            active_class = '',
+            ini_max = 5,
+            ini_mid = 3;
+        if (active_num <= ini_mid) {
+            num_max = page_num < ini_max ? page_num : ini_max;
+            for (var i = 1; i <= num_max; i++) {
+                if (i == active_num) {
+                    active_class = 'active';
+                } else {
+                    active_class = '';
+                }
+                html += '<li class="page-item ' + active_class + '"><a class="page-link" href="#" data-pn="' + i + '">' + i + '</a></li>';
+            }
+            if (page_num > ini_max) {
+                html += '<li class="page-item"><a class="page-link" href="#" data-pn="' + (active_num + 1) + '">下一页</a></li>';
+            }
+        }
+        if (active_num > ini_mid) {
+            html += '<li class="page-item"><a class="page-link" href="#"  data-pn="' + (active_num - 1) + '">上一页</a></li>';
+            if (page_num - active_num > ini_mid) {
+                for (var i = active_num - ini_mid + 1; i <= active_num + ini_mid - 1; i++) {
+                    if (i == active_num) {
+                        active_class = 'active';
+                    } else {
+                        active_class = '';
+                    }
+                    html += '<li class="page-item ' + active_class + '"><a class="page-link" href="#" data-pn="' + i + '">' + i + '</a></li>';
+                }
+                if (page_num > active_num + ini_mid - 1) {
+                    html += '<li class="page-item"><a class="page-link" href="#" data-pn="' + (active_num + 1) + '">下一页</a></li>';
+                }
+            } else {
+                for (var i = page_num - ini_max + 1; i <= page_num; i++) {
+                    if (i == active_num) {
+                        active_class = 'active';
+                    } else {
+                        active_class = '';
+                    }
+                    html += '<li class="page-item ' + active_class + '"><a class="page-link" href="#" data-pn="' + i + '">' + i + '</a></li>';
+                }
+            }
+        }
+        html += '</ul>';
+        return html;
+    }
+
+    $(".search-result-area").on('click', '.page-link', function () {
+        var active_num = $(this).data('pn');
+        q = param2q();
+        var new_url = base_url + q + '&p=' + active_num;
+
+        $.ajax({
+            type: "GET",
+            url: new_url,
+            dataType: 'json',
+            cache: false,
+            data: {},
+            success: function (res) {
+                loadResult(res['hits'], active_num);
+            },
+            error: function () {
+            }
+        });
+
+
+        // layer.msg(new_url);
+        // loadResult(data, active_num = 1)
+    });
+
+
+    //-------------------- 一些辅助函数 --------------------------
+    //调试信息稍微美化一下
+    function myLog(text, value) {
+        var log = '"' + text + '" = ' + value;
+        console.log(log);
+    }
+
+    //返回url参数值
+    function getQueryString(name) {
+        var reg = new RegExp("(^|&)" + name + "=([^&]*)(&|$)");
+        var r = window.location.search.substr(1).match(reg);
+        if (r != null) {
+            return decodeURIComponent(r[2]);
+        }
+        return null;
+    }
+</script>
+</body>
+</html>
