@@ -212,12 +212,19 @@
 
     //点击搜索
     $('#search_btn').on("click", function () {
-        if (typeof node_tags[node_tags.length - 1] === 'string') {
-            layer.msg('不能连续用关键字搜索');
-            return false;
-        }
         var search_word = $("#search_word").val();
         if (!search_word) {
+            return false;
+        }
+        if (typeof node_tags[node_tags.length - 1] === 'string') {
+            //替换关键词搜索
+            param[param.length - 1] = '"' + search_word + '"';
+            myLog('param', param);
+            q = param2q();
+            drawPack(q);
+            node_tags[node_tags.length - 1] = search_word;
+            drawNode();
+            max = -1;
             return false;
         }
         myLog('search_word', search_word);
@@ -234,7 +241,7 @@
         param.push('"' + search_word + '"');
         myLog('param', param);
         q = param2q();
-        setTimeout('drawPack(q)', 800);
+        drawPack(q);
         //画路径
         node_tags.push(tags);
         drawNode();
