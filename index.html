@@ -258,7 +258,11 @@
         window.location.reload();
     }).on('mouseenter', '.node-array', function () {
         var id = $(this).data('id');
-        var long_text = node_tags[id - 1].join("<br />");
+        var long_text_arr = node_tags[id - 1];
+        var long_text = '';
+        for (var i = 0; i < long_text_arr.length; i++) {
+            long_text += long_text_arr[i].substr(0, 4) + '<br/>';
+        }
         $(this).hide().fadeIn(250).addClass('node-text-hover').children('.node-text-word').html(long_text);
     }).on('mouseleave', '.node-array', function () {
         var id = $(this).data('id');
@@ -294,9 +298,9 @@
             }
 
             if (typeof node_tags[i] === 'string') {
-                node_html += 'node-string "><img src="public/img/icon2_string.png?v=1" alt="搜索图标"/><span class="node-text-word">' + node_tags[i] + '</span>';
+                node_html += 'node-string "><img src="public/img/icon2_string.png?v=1" alt="搜索图标"/><span class="node-text-word">' + node_tags[i].substr(0, 4) + '</span>';
             } else {
-                node_html += 'node-array"><img src="public/img/icon1_array.png?v=1" alt="点击图标"/><span class="node-text-word">' + node_tags[i][0] + '</span>';
+                node_html += 'node-array"><img src="public/img/icon1_array.png?v=1" alt="点击图标"/><span class="node-text-word">' + node_tags[i][0].substr(0, 4) + '</span>';
             }
             node_html += '</div>';
             myLog('node_html', node_html);
@@ -371,7 +375,7 @@
                     '</div>';
             }
             res_html += '</div>';
-            var page_num = parseInt(total / 20);//调整页码参数20
+            var page_num = Math.ceil(total / 20);//调整页码参数20
             if (page_num > 0) {
                 res_html += loadPagination(page_num, active_num);
             }
