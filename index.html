@@ -412,7 +412,7 @@
         }
         if (active_num > ini_mid) {
             html += '<li class="page-item"><a class="page-link" href="#"  data-pn="' + (active_num - 1) + '">上一页</a></li>';
-            if (page_num - active_num > ini_mid) {
+            if (page_num - active_num >= ini_mid) {
                 for (var i = active_num - ini_mid + 1; i <= active_num + ini_mid - 1; i++) {
                     if (i == active_num) {
                         active_class = 'active';
